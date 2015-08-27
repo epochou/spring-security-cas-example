@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<b:beans xmlns:b="http://www.springframework.org/schema/beans"
+         xmlns="http://www.springframework.org/schema/security"
+         xmlns:p="http://www.springframework.org/schema/p"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://www.springframework.org/schema/security http://www.springframework.org/schema/security/spring-security.xsd
+         http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-3.0.xsd">
+
+    <b:bean id="serviceProperties"
+            class="org.springframework.security.cas.ServiceProperties"
+            p:service="https://localhost/app2/login/cas"
+            p:authenticateAllArtifacts="true">
+    </b:bean>
+
+    <http entry-point-ref="casEntryPoint">
+        <custom-filter position="CAS_FILTER" ref="casFilter" />
+        <intercept-url pattern="/" access="permitAll"/>
+        <intercept-url pattern="/index.jsp" access="permitAll"/>
+        <intercept-url pattern="/secure/**" access="hasRole('ROLE_USER')" />
+        <intercept-url pattern="/**" access="hasRole('ROLE_USER')"/>
+        <!-- Log out config-->
+        <custom-filter ref="requestSingleLogoutFilter" before="LOGOUT_FILTER"/>
+        <custom-filter ref="singleLogoutFilter" before="CAS_FILTER"/>
+        <csrf disabled="true"/>
+    </http>
+
+    <b:bean id="casEntryPoint"
+            class="org.springframework.security.cas.web.CasAuthenticationEntryPoint"
+            p:loginUrl="https://localhost/cas/login"
+            p:serviceProperties-ref="serviceProperties">
+    </b:bean>
+
+    <b:bean id="casFilter"
+            class="org.springframework.security.cas.web.CasAuthenticationFilter"
+            p:authenticationManager-ref="authManager">
+        <b:property name="proxyGrantingTicketStorage" ref="pgtStorage"/>
+        <b:property name="proxyReceptorUrl" value="/login/cas/proxyreceptor"/>
+        <b:property name="serviceProperties" ref="serviceProperties"/>
+        <b:property name="authenticationDetailsSource">
+            <b:bean class=
+                          "org.springframework.security.cas.web.authentication.ServiceAuthenticationDetailsSource">
+                <b:constructor-arg ref="serviceProperties"/>
+            </b:bean>
+        </b:property>
+    </b:bean>
+
+    <authentication-manager alias="authManager">
+        <authentication-provider ref="casAuthProvider" />
+    </authentication-manager>
+
+    <b:bean id="casAuthProvider"
+            class="org.springframework.security.cas.authentication.CasAuthenticationProvider"
+            p:serviceProperties-ref="serviceProperties"
+            p:key="an_id_for_this_auth_provider_only">
+        <b:property name="authenticationUserDetailsService">
+            <b:bean class="org.springframework.security.core.userdetails.UserDetailsByNameServiceWrapper">
+                <b:constructor-arg ref="userService" />
+            </b:bean>
+        </b:property>
+        <b:property name="ticketValidator">
+            <b:bean class="org.jasig.cas.client.validation.Cas20ProxyTicketValidator">
+                <b:constructor-arg value="https://localhost/cas" />
+                <b:property name="proxyCallbackUrl" value="https://localhost/app2/login/cas/proxyreceptor"/>
+                <b:property name="proxyGrantingTicketStorage" ref="pgtStorage"/>
+                <b:property name="acceptAnyProxy" value="true"/>
+            </b:bean>
+        </b:property>
+        <b:property name="statelessTicketCache">
+            <b:bean class="org.springframework.security.cas.authentication.EhCacheBasedTicketCache">
+                <b:property name="cache">
+                    <b:bean class="net.sf.ehcache.Cache"
+                          init-method="initialise" destroy-method="dispose">
+                        <b:constructor-arg value="casTickets"/>
+                        <b:constructor-arg value="50"/>
+                        <b:constructor-arg value="true"/>
+                        <b:constructor-arg value="false"/>
+                        <b:constructor-arg value="3600"/>
+                        <b:constructor-arg value="900"/>
+                        <b:property name="cacheManager">
+                            <b:bean class="org.springframework.cache.ehcache.EhCacheManagerFactoryBean"/>
+                        </b:property>
+                    </b:bean>
+                </b:property>
+            </b:bean>
+        </b:property>
+    </b:bean>
+
+    <user-service id="userService">
+        <user name="epochou" password="123" authorities="ROLE_USER" />
+    </user-service>
+
+    <!-- This filter handles a Single Logout Request from the CAS Server -->
+    <b:bean id="singleLogoutFilter" class="org.jasig.cas.client.session.SingleSignOutFilter"/>
+
+    <!-- This filter redirects to the CAS Server to signal Single Logout should be performed -->
+    <b:bean id="requestSingleLogoutFilter"
+            class="org.springframework.security.web.authentication.logout.LogoutFilter">
+        <b:constructor-arg value="https://localhost/cas/logout"/>
+        <b:constructor-arg>
+            <b:bean class= "org.springframework.security.web.authentication.logout.SecurityContextLogoutHandler"/>
+        </b:constructor-arg>
+        <b:property name="filterProcessesUrl" value="/logout/cas"/>
+    </b:bean>
+
+    <!--
+    NOTE: In a real application you should not use an in
+            memory implementation. You will also want to ensure
+            to clean up expired tickets by calling ProxyGrantingTicketStorage.cleanup()
+    -->
+    <b:bean id="pgtStorage" class="org.jasig.cas.client.proxy.ProxyGrantingTicketStorageImpl"/>
+</b:beans>

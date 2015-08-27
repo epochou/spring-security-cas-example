@@ -16,5 +16,5 @@ hs_err_pid*
 out/
 *.DS_Store
 .idea/
-/target/
-/overlays/
+*target/
+*overlays/

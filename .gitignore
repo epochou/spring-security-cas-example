@@ -17,4 +17,4 @@ out/
 *.DS_Store
 .idea/
 /target/
-/overlay/
+/overlays/
